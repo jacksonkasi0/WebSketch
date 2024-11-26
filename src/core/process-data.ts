@@ -5,6 +5,7 @@ import { normalizeTextNodes } from '../helpers/normalize-text';
 
 const config = {
     createRootFrame: false, // Control whether to create the root frame (Set to false to skip creating the root frame)
+    pageBackgrounds: false
 };
 
 export async function processData(json: DocumentData) {
@@ -18,9 +19,9 @@ export async function processData(json: DocumentData) {
         page.name = json.name || 'Imported Design';
 
         // Set page background color if provided (not needed)
-        // if (json.doc?.bgColor) {
-        //     page.backgrounds = [{ type: 'SOLID', color: parseColor(json.doc.bgColor) }];
-        // }
+        if (config.pageBackgrounds && json.doc?.bgColor) {
+            page.backgrounds = [{ type: 'SOLID', color: parseColor(json.doc.bgColor) }];
+        }
 
         // Define the parent node
         let parentNode: BaseNode | undefined;
