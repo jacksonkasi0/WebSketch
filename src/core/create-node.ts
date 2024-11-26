@@ -8,6 +8,7 @@ export async function createNode(element: ElementNode, parent: BaseNode, parentA
     let node: SceneNode | undefined;
 
     try {
+        
         switch (element.type.toUpperCase()) {
             case 'FRAME':
             case 'DIV':

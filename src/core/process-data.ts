@@ -1,6 +1,7 @@
 import { parseColor } from '../helpers/parse-color';
 import { createNode } from './create-node';
 import { DocumentData } from '../types';
+import { normalizeTextNodes } from '../helpers/normalize-text';
 
 const config = {
     createRootFrame: false, // Control whether to create the root frame (Set to false to skip creating the root frame)
@@ -8,6 +9,12 @@ const config = {
 
 export async function processData(json: DocumentData) {
     try {
+
+        // Preprocess the JSON to normalize text nodes
+        json.frame = normalizeTextNodes(json.frame);
+
+        console.log({json})
+
         // Set up the current page
         const page = figma.currentPage;
         page.name = json.name || 'Imported Design';
