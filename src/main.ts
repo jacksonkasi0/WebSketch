@@ -1,6 +1,6 @@
 import { showUI } from '@create-figma-plugin/utilities';
 import { processData } from './core/process-data';
-import { getJSONData } from './core/get-data';
+import { getJSONData } from './data/get-data';
 
 export default function () {
   showUI({
