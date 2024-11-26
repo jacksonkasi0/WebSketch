@@ -70,7 +70,7 @@ export async function createNode(element: ElementNode, parent: BaseNode, parentA
 
             // Apply styles
             if (element.styles) {
-                applyStyles(node, element.styles);
+                applyStyles(node, element.styles, element.tag);
             }
 
             // Set name
