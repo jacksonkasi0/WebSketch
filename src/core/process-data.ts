@@ -13,16 +13,14 @@ export async function processData(json: DocumentData) {
         // Preprocess the JSON to normalize text nodes
         json.frame = normalizeTextNodes(json.frame);
 
-        console.log({json})
-
         // Set up the current page
         const page = figma.currentPage;
         page.name = json.name || 'Imported Design';
 
-        // Set page background color if provided
-        if (json.doc?.bgColor) {
-            page.backgrounds = [{ type: 'SOLID', color: parseColor(json.doc.bgColor) }];
-        }
+        // Set page background color if provided (not needed)
+        // if (json.doc?.bgColor) {
+        //     page.backgrounds = [{ type: 'SOLID', color: parseColor(json.doc.bgColor) }];
+        // }
 
         // Define the parent node
         let parentNode: BaseNode | undefined;
