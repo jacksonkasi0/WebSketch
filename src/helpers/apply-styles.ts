@@ -3,7 +3,7 @@ import { StyleMap } from '../types';
 
 export function applyStyles(node: SceneNode, styles: StyleMap, tag?: string) {
     // List of tags to exclude `backgroundColor`
-    const excludedBackgroundTags = ['html', 'p', 'a', 'span'];
+    const excludedBackgroundTags = ['html', 'p', 'a', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'strong', 'em', 'b', 'i', 'u', 'small', 'sub', 'sup', 'mark', 'del', 'ins', 'abbr', 'cite', 'code', 'dfn', 'kbd', 'q', 's', 'samp', 'var'];
 
     for (const [key, value] of Object.entries(styles)) {
         if (!value) continue;
