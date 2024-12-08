@@ -11,5 +11,8 @@
   "license": "ISC",
   "devDependencies": {
     "html-sketchapp-cli": "^0.6.2"
+  },
+  "dependencies": {
+    "puppeteer": "^23.10.1"
   }
 }
