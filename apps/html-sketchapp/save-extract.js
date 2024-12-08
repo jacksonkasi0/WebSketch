@@ -3,29 +3,21 @@ const fs = require('fs');
 
 (async () => {
   const url = 'https://example.com/';
-  const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+  const browser = await puppeteer.launch({
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
   const page = await browser.newPage();
   await page.goto(url, { waitUntil: 'networkidle2' });
 
   const result = await page.evaluate(() => {
-    // List of doc-level background style keys
+    // Properties for doc-level styles
     const docStyleKeys = [
-      "background",
-      "backgroundAttachment",
-      "backgroundBlendMode",
-      "backgroundClip",
-      "backgroundColor",
-      "backgroundImage",
-      "backgroundOrigin",
-      "backgroundPosition",
-      "backgroundPositionX",
-      "backgroundPositionY",
-      "backgroundRepeat",
-      "backgroundSize"
+      "background", "backgroundAttachment", "backgroundBlendMode", "backgroundClip", 
+      "backgroundColor", "backgroundImage", "backgroundOrigin", "backgroundPosition", 
+      "backgroundPositionX", "backgroundPositionY", "backgroundRepeat", "backgroundSize"
     ];
 
-    // List of frame-level style keys as per the sample structure
-    // (Includes box model, typography, positioning, etc.)
+    // Properties for frame-level styles (as per sample structure)
     const frameStyleKeys = [
       // Box Model:
       "width", "height",
@@ -36,22 +28,25 @@ const fs = require('fs');
       "borderColor", "borderTopColor", "borderRightColor", "borderBottomColor", "borderLeftColor",
       "borderStyle", "borderTopStyle", "borderRightStyle", "borderBottomStyle", "borderLeftStyle",
       "borderRadius", "borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius",
-
+      
       // Positioning and Layout:
-      "position", "zIndex", "display", "flexDirection", "alignItems", "justifyContent", "flexGrow", "flexShrink", "order",
+      "position", "zIndex", "display", "flexDirection", "alignItems", "justifyContent", 
+      "flexGrow", "flexShrink", "order",
 
       // Typography:
-      "fontFamily", "fontSize", "fontStyle", "fontWeight", "lineHeight", "letterSpacing", "textAlign", "textDecoration", "textTransform",
+      "fontFamily", "fontSize", "fontStyle", "fontWeight", "lineHeight", "letterSpacing", 
+      "textAlign", "textDecoration", "textTransform",
 
       // Colors and Background:
-      "color", "backgroundColor", "backgroundImage", "backgroundPosition", "backgroundSize", "backgroundRepeat", "boxShadow",
+      "color", "backgroundColor", "backgroundImage", "backgroundPosition", 
+      "backgroundSize", "backgroundRepeat", "boxShadow",
 
       // Other Styles:
       "opacity", "overflow", "overflowX", "overflowY", "visibility", "cursor",
-      "boxSizing", "listStyleType", "outlineColor", "minHeight", "minWidth",
-      // Include margin, padding, etc. even if they appear redundant.
+      "boxSizing", "listStyleType", "outlineColor", "minHeight", "minWidth"
     ];
 
+    // Determine element type based on tagName
     function getElementType(tagName) {
       const t = tagName.toLowerCase();
       if (t === 'img') return 'IMAGE';
@@ -65,18 +60,37 @@ const fs = require('fs');
       return 'FRAME'; // default
     }
 
+    // Decide if we should skip an element entirely (e.g. <style>, <script>)
+    function shouldSkipElement(el) {
+      const tagName = el.tagName.toLowerCase();
+      return tagName === 'style' || tagName === 'script';
+    }
+
     function getNodeInfo(node) {
+      // If it's a text node
       if (node.nodeType === Node.TEXT_NODE) {
-        const textContent = node.nodeValue.trim();
-        if (!textContent) return null;
+        const text = node.nodeValue.trim();
+        if (!text) return null; // skip empty text nodes
+        // Check if parent is style or script
+        const parentTag = node.parentNode && node.parentNode.tagName ? node.parentNode.tagName.toLowerCase() : '';
+        if (parentTag === 'style' || parentTag === 'script') {
+          return null; // skip text inside style/script
+        }
         return {
           type: "TEXT",
-          content: textContent
+          content: text
         };
       }
 
+      // If it's an element node
       if (node.nodeType === Node.ELEMENT_NODE) {
         const el = node;
+
+        if (shouldSkipElement(el)) {
+          // Skip entire element (e.g. style or script) and its children
+          return null;
+        }
+
         const rect = el.getBoundingClientRect();
         const computedStyle = window.getComputedStyle(el);
 
@@ -90,30 +104,28 @@ const fs = require('fs');
         const classList = Array.from(el.classList);
         const elementType = getElementType(el.tagName);
 
-        // Extract the allowed frame styles
+        // Extract specified frame styles
         const styles = {};
         frameStyleKeys.forEach(key => {
           const val = computedStyle.getPropertyValue(key);
-          if (val !== null) {
-            styles[key] = val;
-          }
+          styles[key] = val;
         });
 
-        // Children
+        // Collect children
         const children = [];
         el.childNodes.forEach(child => {
           const childInfo = getNodeInfo(child);
           if (childInfo) children.push(childInfo);
         });
 
-        // If this is a TEXT element with a single TEXT child, move content up
         let content;
         if (elementType === "TEXT" && children.length === 1 && children[0].type === "TEXT") {
+          // Pull up text content and remove the text node child
           content = children[0].content;
-          children.length = 0; // Remove the text child node
+          children.length = 0;
         }
 
-        return {
+        const nodeInfo = {
           x: rect.x,
           y: rect.y,
           width: rect.width,
@@ -123,20 +135,28 @@ const fs = require('fs');
           tag: el.tagName.toLowerCase(),
           attr,
           classList,
-          ...(content ? { content } : {}),
-          styles,
-          ...(children.length > 0 ? { children } : {})
+          styles
         };
+
+        if (content) nodeInfo.content = content;
+        if (children.length > 0) nodeInfo.children = children;
+
+        // If this element is the scrolling element, add isScrollingElt
+        if (el === document.scrollingElement) {
+          nodeInfo.isScrollingElt = true;
+        }
+
+        return nodeInfo;
       }
 
       return null;
     }
 
-    // Document styles
+    // Extract doc-level styles
     const docComputedStyle = window.getComputedStyle(document.documentElement);
-    const docStyleObj = {};
+    const docStyles = {};
     docStyleKeys.forEach(key => {
-      docStyleObj[key] = docComputedStyle.getPropertyValue(key);
+      docStyles[key] = docComputedStyle.getPropertyValue(key);
     });
 
     const docInfo = {
@@ -145,12 +165,12 @@ const fs = require('fs');
       fontSize: parseFloat(window.getComputedStyle(document.documentElement).fontSize),
       baseURI: document.baseURI,
       bgColor: window.getComputedStyle(document.body).backgroundColor,
-      styles: docStyleObj
+      styles: docStyles
     };
 
-    const frame = getNodeInfo(document.documentElement);
+    const frame = getNodeInfo(document.documentElement) || {};
 
-    // fonts and assets can be implemented later if needed
+    // For now, fonts and assets are left empty or can be implemented as needed
     const fonts = [];
     const assets = {};
 
