@@ -10,14 +10,12 @@ const fs = require('fs');
   await page.goto(url, { waitUntil: 'networkidle2' });
 
   const result = await page.evaluate(() => {
-    // Keys for doc-level background style extraction
     const docStyleKeys = [
-      "background", "backgroundAttachment", "backgroundBlendMode", "backgroundClip", 
-      "backgroundColor", "backgroundImage", "backgroundOrigin", "backgroundPosition", 
+      "background", "backgroundAttachment", "backgroundBlendMode", "backgroundClip",
+      "backgroundColor", "backgroundImage", "backgroundOrigin", "backgroundPosition",
       "backgroundPositionX", "backgroundPositionY", "backgroundRepeat", "backgroundSize"
     ];
 
-    // Keys for frame-level style extraction
     const frameStyleKeys = [
       "width", "height", "left", "top", "right", "bottom",
       "margin", "marginTop", "marginRight", "marginBottom", "marginLeft",
@@ -26,11 +24,11 @@ const fs = require('fs');
       "borderColor", "borderTopColor", "borderRightColor", "borderBottomColor", "borderLeftColor",
       "borderStyle", "borderTopStyle", "borderRightStyle", "borderBottomStyle", "borderLeftStyle",
       "borderRadius", "borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius",
-      "position", "zIndex", "display", "flexDirection", "alignItems", "justifyContent", 
+      "position", "zIndex", "display", "flexDirection", "alignItems", "justifyContent",
       "flexGrow", "flexShrink", "order",
-      "fontFamily", "fontSize", "fontStyle", "fontWeight", "lineHeight", "letterSpacing", 
+      "fontFamily", "fontSize", "fontStyle", "fontWeight", "lineHeight", "letterSpacing",
       "textAlign", "textDecoration", "textTransform",
-      "color", "backgroundColor", "backgroundImage", "backgroundPosition", 
+      "color", "backgroundColor", "backgroundImage", "backgroundPosition",
       "backgroundSize", "backgroundRepeat", "boxShadow",
       "opacity", "overflow", "overflowX", "overflowY", "visibility", "cursor",
       "boxSizing", "listStyleType", "outlineColor", "minHeight", "minWidth"
@@ -65,54 +63,42 @@ const fs = require('fs');
     }
 
     function formatBoxShadow(val) {
-      // Convert computed boxShadow to the expected format: 
-      // rgba(r,g,b,a) xpx ypx blurpx spreadpx
-      // If multiple shadows, take the first.
-      // If spread not available, assume 0px.
       if (!val || val === 'none') return '';
-      const parts = val.split(',')[0].trim().split(/\s+/);
-      // parts might look like: ["rgba(0,0,0,0.2)","2px","3px","7px","2px"]
-      // or ["rgb(0,0,0)","2px","3px","7px","2px"]
+      const firstShadow = val.split(',')[0].trim().split(/\s+/);
       let colorPart = '';
-      let offsets = [];
-      for (let i = 0; i < parts.length; i++) {
-        if (parts[i].includes('rgb')) {
-          // colorPart might be rgb(...) or rgba(...)
-          // Join if it spans multiple tokens due to spaces (unlikely but safe)
-          const colorEnd = parts[i].indexOf(')') > -1;
-          colorPart = parts[i];
-          // If colorPart incomplete and next token is still part of color, concatenate (rare)
+      const offsets = [];
+
+      for (let i = 0; i < firstShadow.length; i++) {
+        if (firstShadow[i].includes('rgb')) {
+          colorPart = firstShadow[i];
         } else {
-          offsets.push(parts[i]);
+          offsets.push(firstShadow[i]);
         }
       }
 
       if (!colorPart) return '';
-
-      // offsets should now contain something like ["2px","3px","7px","2px"]
-      // Ensure we have at least x,y,blur. If spread missing, set it to 0px.
-      if (offsets.length < 3) return ''; 
-      if (offsets.length === 3) offsets.push('0px'); // Add spread if missing
+      if (offsets.length < 3) return '';
+      if (offsets.length === 3) offsets.push('0px');
 
       return [colorPart, offsets.join(' ')].join(' ');
     }
 
-    function getTextNodeInfo(textNode) {
-      const parentEl = textNode.parentNode;
-      if (!parentEl) return null;
-
+    function measureTextLine(textNode, lineText, startOffset, endOffset) {
+      // Create a sub-range for this line
       const range = document.createRange();
-      range.selectNodeContents(textNode);
+      range.setStart(textNode, startOffset);
+      range.setEnd(textNode, endOffset);
+
       const rects = range.getClientRects();
       if (!rects.length) return null;
       const rect = rects[0];
 
+      const parentEl = textNode.parentNode;
       const computedStyle = window.getComputedStyle(parentEl);
       const fontFamily = computedStyle.fontFamily;
       const fontSize = parseFloat(computedStyle.fontSize);
-      let lineHeight = computedStyle.lineHeight;
-      let exactLineHeight = lineHeight === 'normal' ? fontSize * 1.2 : parseFloat(lineHeight);
-      const value = textNode.nodeValue.trim();
+      const lineHeight = computedStyle.lineHeight;
+      const exactLineHeight = lineHeight === 'normal' ? fontSize * 1.2 : parseFloat(lineHeight);
 
       const x = rect.x;
       const y = rect.y;
@@ -132,23 +118,100 @@ const fs = require('fs');
         width,
         height,
         quad,
-        value,
+        value: lineText,
         exactLineHeight,
         font: fontFamily.replace(/['"]/g,'').split(',')[0].trim(),
         platformFont
       };
     }
 
+    function getTextNodeInfo(textNode) {
+      let rawText = textNode.nodeValue;
+      if (!rawText || !rawText.trim()) return [];
+
+      rawText = rawText.replace(/\r\n/g, '\n'); // normalize line endings
+      const lines = rawText.split('\n');
+
+      // If there's only one line, measure directly
+      if (lines.length === 1) {
+        const singleLine = lines[0].trim();
+        if (!singleLine) return [];
+        return measureSingleTextLine(textNode, singleLine);
+      }
+
+      // Multiple lines: measure each line separately
+      // We'll measure each line by calculating offsets
+      const results = [];
+      let currentOffset = 0;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        const lineLength = line.length;
+        if (trimmed) {
+          // Find start and end offset of the trimmed line inside the raw line
+          const lineStartIndex = rawText.indexOf(line, currentOffset);
+          const lineEndIndex = lineStartIndex + lineLength;
+
+          const measured = measureTextLine(textNode, trimmed, lineStartIndex, lineEndIndex);
+          if (measured) results.push(measured);
+        }
+        currentOffset += lineLength + 1; // +1 for the newline char
+      }
+      return results;
+    }
+
+    function measureSingleTextLine(textNode, singleLine) {
+      // Measure the entire text node (which has a single line)
+      const parentEl = textNode.parentNode;
+      if (!parentEl) return [];
+
+      // Create a range for the entire text node
+      const range = document.createRange();
+      range.selectNodeContents(textNode);
+      const rects = range.getClientRects();
+      if (!rects.length) return [];
+
+      const rect = rects[0];
+      const computedStyle = window.getComputedStyle(parentEl);
+      const fontFamily = computedStyle.fontFamily;
+      const fontSize = parseFloat(computedStyle.fontSize);
+      const lineHeight = computedStyle.lineHeight;
+      const exactLineHeight = lineHeight === 'normal' ? fontSize * 1.2 : parseFloat(lineHeight);
+
+      const x = rect.x;
+      const y = rect.y;
+      const width = rect.width;
+      const height = rect.height;
+      const quad = [x, y, x+width, y, x+width, y+height, x, y+height];
+
+      const platformFont = {
+        familyName: fontFamily.replace(/['"]/g,'').split(',')[0].trim(),
+        postScriptName: fontFamily.replace(/['"\s]/g,'').replace(/,/g,'-')
+      };
+
+      return [{
+        type: "TEXT",
+        x,
+        y,
+        width,
+        height,
+        quad,
+        value: singleLine,
+        exactLineHeight,
+        font: fontFamily.replace(/['"]/g,'').split(',')[0].trim(),
+        platformFont
+      }];
+    }
+
     function getNodeInfo(node) {
       if (node.nodeType === Node.TEXT_NODE) {
-        const text = node.nodeValue.trim();
-        if (!text) return null;
         const parentTag = node.parentNode && node.parentNode.tagName ? node.parentNode.tagName.toLowerCase() : '';
         if (parentTag === 'style' || parentTag === 'script') {
           return null;
         }
-        const textInfo = getTextNodeInfo(node);
-        return textInfo ? textInfo : { type: "TEXT", content: text };
+        // Return an array of TEXT nodes if multiline
+        const textResults = getTextNodeInfo(node);
+        // getTextNodeInfo returns an array, but we need to return them to the parent as children
+        return textResults.length ? textResults : null;
       }
 
       if (node.nodeType === Node.ELEMENT_NODE) {
@@ -158,7 +221,6 @@ const fs = require('fs');
         const rect = el.getBoundingClientRect();
         const computedStyle = window.getComputedStyle(el);
 
-        // Extract attributes
         const attr = {};
         for (let i=0; i<el.attributes.length; i++) {
           const attribute = el.attributes[i];
@@ -168,7 +230,6 @@ const fs = require('fs');
         const classList = Array.from(el.classList);
         const elementType = getElementType(el.tagName);
 
-        // Extract styles
         const rawStyles = {};
         for (const key of frameStyleKeys) {
           let val = computedStyle.getPropertyValue(key);
@@ -179,28 +240,31 @@ const fs = require('fs');
         }
         const styles = filterEmptyProps(rawStyles);
 
-        const children = [];
+        // Process children
+        const childrenNodes = [];
         el.childNodes.forEach(child => {
           const childInfo = getNodeInfo(child);
-          if (childInfo) children.push(childInfo);
+          if (childInfo) {
+            // childInfo might be an array (for TEXT nodes with multiple lines) or a single object
+            if (Array.isArray(childInfo)) {
+              childrenNodes.push(...childInfo);
+            } else {
+              childrenNodes.push(childInfo);
+            }
+          }
         });
-
-        let content;
-        // If it's a TEXT element with a single TEXT child, move that child's value up
-        if (elementType === "TEXT" && children.length === 1 && children[0].type === "TEXT" && children[0].value) {
-          content = children[0].value;
-          children.length = 0;
-        } else if (elementType === "TEXT" && children.length === 1 && children[0].type === "TEXT" && children[0].content) {
-          content = children[0].content;
-          children.length = 0;
-        }
 
         const nodeInfo = {
           x: rect.x,
           y: rect.y,
           width: rect.width,
           height: rect.height,
-          quad: [rect.x, rect.y, rect.x + rect.width, rect.y, rect.x + rect.width, rect.y + rect.height, rect.x, rect.y + rect.height],
+          quad: [
+            rect.x, rect.y,
+            rect.x + rect.width, rect.y,
+            rect.x + rect.width, rect.y + rect.height,
+            rect.x, rect.y + rect.height
+          ],
           type: elementType,
           tag: el.tagName.toLowerCase()
         };
@@ -208,8 +272,7 @@ const fs = require('fs');
         if (Object.keys(attr).length > 0) nodeInfo.attr = attr;
         if (classList.length > 0) nodeInfo.classList = classList;
         if (Object.keys(styles).length > 0) nodeInfo.styles = styles;
-        if (content) nodeInfo.content = content;
-        if (children.length > 0) nodeInfo.children = children;
+        if (childrenNodes.length > 0) nodeInfo.children = childrenNodes;
         if (el === document.scrollingElement) nodeInfo.isScrollingElt = true;
 
         return nodeInfo;
@@ -218,7 +281,6 @@ const fs = require('fs');
       return null;
     }
 
-    // Extract doc-level styles
     const docComputedStyle = window.getComputedStyle(document.documentElement);
     const docStylesRaw = {};
     docStyleKeys.forEach(k => {
@@ -235,7 +297,6 @@ const fs = require('fs');
       styles: docStyles
     };
 
-    // Start from document.body only
     const frame = getNodeInfo(document.body) || {};
 
     const fonts = [];
