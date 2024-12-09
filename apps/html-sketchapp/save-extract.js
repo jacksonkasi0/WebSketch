@@ -29,13 +29,13 @@ const viewportConfigurations = [
 ];
 
 (async () => {
-  const url = "https://example.com/";
+  const url = "https://www.wikipedia.org";
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
 
-  const config = viewportConfigurations[3];
+  const config = viewportConfigurations[2];
 
   // Set the viewport size
   await page.setViewport({

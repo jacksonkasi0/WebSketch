@@ -1,0 +1,18 @@
+# Additional Tips for Better Performance:
+
+1. Memory Management
+```js
+// Add this to main.js if memory usage is a concern
+const cleanupInterval = setInterval(async () => {
+  if (!page.isClosed()) {
+    await page.evaluate(() => {
+      window.gc && window.gc();
+    });
+  }
+}, 30000);
+
+// Clear interval on page close
+page.once('close', () => clearInterval(cleanupInterval));
+```
+2. Batch Processing
+3. Error Handling and Retries:
