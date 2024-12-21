@@ -1,12 +1,54 @@
 const puppeteer = require("puppeteer");
 const fs = require("fs");
 
+const viewportConfigurations = [
+  {
+    name: "Mobile",
+    width: 375,
+    height: 667,
+    mode: "light", // Options: "light" or "dark"
+  },
+  {
+    name: "Tablet",
+    width: 768,
+    height: 1024,
+    mode: "dark", // Options: "light" or "dark"
+  },
+  {
+    name: "Desktop",
+    width: 1920,
+    height: 1080,
+    mode: "light", // Options: "light" or "dark"
+  },
+  {
+    name: "Wide Desktop",
+    width: 2560,
+    height: 1440,
+    mode: "dark", // Options: "light" or "dark"
+  },
+];
+
 (async () => {
-  const url = "https://example.com/";
+  const url = "https://www.wikipedia.org";
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
   });
   const page = await browser.newPage();
+
+  const config = viewportConfigurations[2];
+
+  // Set the viewport size
+  await page.setViewport({
+    width: config.width,
+    height: config.height,
+  });
+
+  // Apply light or dark mode using the `prefers-color-scheme` CSS media query
+  await page.emulateMediaFeatures([
+    { name: "prefers-color-scheme", value: config.mode },
+  ]);
+
+  console.log(`Testing ${config.name} with ${config.mode} mode`);
   await page.goto(url, { waitUntil: "networkidle2" });
 
   const result = await page.evaluate(() => {
