@@ -1,33 +1,26 @@
 /**
- * @file main.js
- * @description Main script entry point. Launches Puppeteer, navigates to a URL, collects layout/style data, and saves output.
+ * One common issue is that addScriptTag runs each script in its own scope, and sometimes
+ * the order of script execution can conflict. Below is an example showing how to merge
+ * your helper scripts into a single string, then inject them all at once. After this,
+ * the functions should be accessible on window.nodeUtils:
  */
 
 const puppeteer = require("puppeteer");
-
-const path = require('path');
-const fs = require('fs').promises;
-
-const {
-  viewport_configurations,
-  target_url,
-} = require("../config/puppeteer_config");
-
-const { write_to_json } = require("../utils/file_utils");
+const path = require("path");
+const fs = require("fs").promises;
 
 const { get_document_info, collect_page_data } = require("../helpers/dom_helper");
+const { get_text_node_info } = require("../helpers/extract_text");
+const { write_to_json } = require("../utils/file_utils");
+const { viewport_configurations, target_url } = require("../config/puppeteer_config");
+const { get_node_info } = require("../helpers/extract_node_info");
 
 /**
- * Sets the color scheme (light or dark) for Puppeteer page emulation.
- * @param {import('puppeteer').Page} page - Puppeteer Page object.
- * @param {string} scheme - "light" or "dark".
+ * Example function to set color scheme in Puppeteer.
  */
 async function set_color_scheme(page, scheme) {
   await page.emulateMediaFeatures([
-    {
-      name: "prefers-color-scheme",
-      value: scheme,
-    },
+    { name: "prefers-color-scheme", value: scheme }
   ]);
 }
 
@@ -49,34 +42,40 @@ async function set_color_scheme(page, scheme) {
     });
     await set_color_scheme(page, chosen_config.mode);
 
-    console.log(
-      `Testing ${chosen_config.name} with ${chosen_config.mode} mode`
-    );
+    console.log(`Testing ${chosen_config.name} with ${chosen_config.mode} mode`);
     await page.goto(target_url, { waitUntil: "networkidle2" });
 
-    const scriptPath = path.join(__dirname, "..", "helpers", "extract_node_info.js");
-    const nodeInfoScript = await fs.readFile(scriptPath, "utf8");
+    // Expose helper functions to the browser context
+    await page.exposeFunction("getNodeInfo", get_node_info);
+    await page.exposeFunction("getDocumentInfo", get_document_info);
+    await page.exposeFunction("collectPageData", collect_page_data);
+    await page.exposeFunction("getTextNodeInfo", get_text_node_info);
 
-    const injectedScript = `
-      ${nodeInfoScript}
-      ${get_document_info.toString()}
-      ${collect_page_data.toString()}
-      ${get_text_node_info.toString()} // Ensure it is defined here
-      window.nodeUtils = { 
-        get_node_info, 
-        get_document_info,
-        collect_page_data,
-        get_text_node_info // Add it to the object
+    // Attach exposed functions to window.nodeUtils
+    await page.evaluate(() => {
+      window.nodeUtils = {
+        get_node_info: window.getNodeInfo,
+        get_document_info: window.getDocumentInfo,
+        collect_page_data: window.collectPageData,
+        get_text_node_info: window.getTextNodeInfo,
       };
-    `;
+    });
 
-    await page.addScriptTag({ content: injectedScript });
+    // Debugging: Log window.nodeUtils in browser context
+    const debugUtils = await page.evaluate(() => {
+      return Object.keys(window.nodeUtils || {});
+    });
+    console.log("Available functions in window.nodeUtils:", debugUtils);
 
     // Execute the injected functions
     const result = await page.evaluate(() => {
+      if (!window.nodeUtils.collect_page_data) {
+        throw new Error("collect_page_data is not defined in window.nodeUtils");
+      }
       return window.nodeUtils.collect_page_data();
     });
 
+    // Save results to output.json
     write_to_json("output.json", result);
   } catch (err) {
     console.error("Error during Puppeteer script execution:", err);
