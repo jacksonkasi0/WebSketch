@@ -3,6 +3,8 @@
  * @description Provides utility functions for extracting and processing inline styles from DOM elements.
  */
 
+const { to_camel_case } = require("../utils/case");
+
 
 /**
  * Simplifies the 'box-shadow' value by extracting only the color and offset information for the first shadow.
@@ -193,7 +195,6 @@ function extract_element_styles(element) {
 }
 
 module.exports = {
-    to_camel_case,
     format_box_shadow,
     add_shorthand_properties,
     extract_element_styles,

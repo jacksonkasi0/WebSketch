@@ -22,5 +22,8 @@
   },
   "peerDependencies": {
     "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "puppeteer": "^23.11.1"
   }
 }
