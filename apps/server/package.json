@@ -1,0 +1,26 @@
+{
+  "name": "puppeteer-refactored",
+  "version": "1.0.0",
+  "description": "A modular and well-structured Puppeteer script for web page analysis.",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "node src/main.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "eslint .",
+    "format": "prettier --write ."
+  },
+  "keywords": [
+    "puppeteer",
+    "web-scraping",
+    "automation",
+    "web-analysis"
+  ],
+  "author": "JACKSON KASI",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
